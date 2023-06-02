@@ -1,5 +1,7 @@
 # OpenAI Billing Insights
 
+![fig1](./docs/fig1.png)
+
 ## Description
 
 `openai-billing-insights` is a Python-based project aimed to visualize the cost associated with the usage of various models in OpenAI's API. The application retrieves data from OpenAI's API, processes it, and provides visual analytics of model usage costs over time.
