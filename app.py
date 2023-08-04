@@ -6,17 +6,27 @@ import datetime
 from get_api_usage import get_monthly_usage
 
 
-def get_current_date() -> tuple:
+def get_current_year_month() -> tuple:
+    """今日の年と月を取得する
+
+    Returns:
+        tuple(str, str): 年, 月
+    """
     return datetime.datetime.now().year, datetime.datetime.now().month
 
 def update_progress(progress: float):
+    """WebUIのプログレスバーを更新
+
+    Args:
+        progress (float): _description_
+    """
     progress_bar.progress(progress)
     progress_text.text(f"Processing {int(progress * 100)}% completed.")
 
 st.title("OpenAI API Monthly Usage")
 
 # get the current year and month
-current_year, current_month = get_current_date()
+current_year, current_month = get_current_year_month()
 # Define available years and months
 available_years = list(range(2020, 2024))
 available_months = list(range(1, 13))

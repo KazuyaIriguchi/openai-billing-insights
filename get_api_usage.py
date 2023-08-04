@@ -15,6 +15,14 @@ with open("./pricing.json", "r") as f:
 API_WAIT_TIME = 12  # sec
 
 def call_usage_api(date: str) -> requests.Response:
+    """一日の使用状況を取得
+
+    Args:
+        date (str): 日付(YYYY-mm-dd)
+
+    Returns:
+        requests.Response: レスポンス
+    """
     # エンドポイントとヘッダーの設定
     url = "https://api.openai.com/v1/usage"
     headers = {"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"}
@@ -29,6 +37,14 @@ def call_usage_api(date: str) -> requests.Response:
         return e
 
 def get_model_costs(data: dict) -> dict:
+    """GPTモデルのコストを取得
+
+    Args:
+        data (dict): 一日の使用状況データ
+
+    Returns:
+        dict: GPTモデルごとのコスト
+    """
     # 各モデルの統計を保存する辞書
     model_stats = defaultdict(lambda: {'n_context_tokens_total': 0, 'n_generated_tokens_total': 0})
 
@@ -54,6 +70,14 @@ def get_model_costs(data: dict) -> dict:
     return model_costs
 
 def get_whisper_costs(data: dict) -> dict:
+    """Whisperのコストを取得
+
+    Args:
+        data (dict): 一日の使用状況データ
+
+    Returns:
+        dict: Whisperのコストデータ
+    """
     whisper_data = data.get("whisper_api_data", [])
     # 合計使用秒数とコストを計算
     whisper_cost_def = model_pricing["whisper-1"]
@@ -65,6 +89,14 @@ def get_whisper_costs(data: dict) -> dict:
     }
 
 def get_daily_usage(date: str) -> dict:
+    """一日の使用状況、コストを取得
+
+    Args:
+        date (str): 日付(YYYY-mm-dd)
+
+    Returns:
+        dict: 使用状況・コスト
+    """
     # コスト取得
     data = call_usage_api(date).json()
 
@@ -78,7 +110,18 @@ def get_daily_usage(date: str) -> dict:
         "whisper_costs": whisper_costs
     }
 
-def get_monthly_usage(year_month: str, wait_time: float=API_WAIT_TIME, dryrun: bool=False, callback=None):
+def get_monthly_usage(year_month: str, wait_time: float=API_WAIT_TIME, dryrun: bool=False, callback=None) -> dict:
+    """ひと月のAPI使用状況・コストを取得
+
+    Args:
+        year_month (str): 対象となる月(YYYY-mm)
+        wait_time (float, optional): API実行待機時間. Defaults to API_WAIT_TIME.
+        dryrun (bool, optional): APIを実行しないフラグ. Defaults to False.
+        callback (_type_, optional): コールバック関数（表示更新用）. Defaults to None.
+
+    Returns:
+        dict: ひと月のAPI使用状況・コストデータ
+    """
     # 年と月の取得
     year, month = map(int, year_month.split('-'))
 
@@ -111,11 +154,19 @@ def get_monthly_usage(year_month: str, wait_time: float=API_WAIT_TIME, dryrun: b
             progress_percentage = current_date.day / total_days
             callback(progress_percentage)
 
+        # APIレート制限エラー対策のため待つ (rate limit: 5 request/min)
         time.sleep(wait_time)
         current_date += timedelta(days=1)
     return monthly_usage
 
 def export_monthly_usage_data(year: str, month: str, usage_data: dict):
+    """ひと月の使用状況をJSONファイルにエクスポートする
+
+    Args:
+        year (str): 年
+        month (str): 月
+        usage_data (dict): 使用状況データ
+    """
     output_name = f"{year}_{month}_openai_api_usage.json"
     with open(output_name, "w") as f:
         json.dump(usage_data, f, indent=4)
