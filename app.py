@@ -1,70 +1,127 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+import datetime
 import json
-import requests
-import os
-from datetime import datetime
+
+from get_api_usage import get_monthly_usage
 
 
-def get_usage(year_month, organization):
-    # 年と月の取得
-    year, month = map(int, year_month.split('-'))
+def get_current_year_month() -> tuple:
+    """今日の年と月を取得する
 
-    # 開始日と終了日の作成
-    start_date = f"{year}-{month:02d}-01"
+    Returns:
+        tuple(str, str): 年, 月
+    """
+    return datetime.datetime.now().year, datetime.datetime.now().month
 
-    # 翌月の1日を計算
-    year, month = (year, month + 1) if month < 12 else (year + 1, 1)
-    end_date = f"{year}-{month:02d}-01"
+def update_progress(progress: float):
+    """WebUIのプログレスバーを更新
 
-    # API の URL の作成
-    url = f"https://api.openai.com/dashboard/billing/usage?end_date={end_date}&start_date={start_date}"
+    Args:
+        progress (float): _description_
+    """
+    progress_bar.progress(progress)
+    progress_text.text(f"Processing {int(progress * 100)}% completed.")
 
-    headers = {
-        "openai-organization": organization,
-        "authorization": "Bearer " + os.getenv("OPENAI_API_KEY"),
-    }
+def load_monthly_usage(uploaded_file) -> dict:
+    """アップロードされたひと月の使用状況JSONファイルを読み込み
 
-    # API リクエストの送信と結果の表示
-    response = requests.get(url, headers=headers)
+    Args:
+        uploaded_file (): アップロードされたJSONファイル
 
-    output_name = f"{start_date}_to_{end_date}_{organization}_usage.json"
-    with open(output_name, "w") as f:
-        json.dump(response.json(), f, indent=4)
-    return response.json()
+    Returns:
+        dict: 使用状況データ
+    """
+    # Read the uploaded file as bytes
+    file_bytes = uploaded_file.read()
 
-year_month = st.text_input("YYYY-MM")
-organization = st.text_input("your organization")
+    # Convert bytes to a string
+    file_str = file_bytes.decode("utf-8")
+
+    # Load the JSON content from the string
+    json_data = json.loads(file_str)
+
+    return json_data
+
+st.title("OpenAI API Monthly Usage")
+# Let the user choose between API and File
+option = st.radio("Choose data source:", ("Use API", "Upload File"))
+use_api = True
+
+if option == "Use API":
+    # get the current year and month
+    current_year, current_month = get_current_year_month()
+    # Define available years and months
+    available_years = list(range(2020, 2024))
+    available_months = list(range(1, 13))
+
+    # Find the index of the current year and month
+    default_year_index = available_years.index(current_year)
+    default_month_index = available_months.index(current_month)
+
+    # Create select boxes for year and month with default values
+    selected_year = st.selectbox("Select Year:", available_years, index=default_year_index)
+    selected_month = st.selectbox("Select Month:", available_months, index=default_month_index)
+elif option == "Upload File":
+    # Let the user upload a file
+    uploaded_file = st.file_uploader("Choose a file:", type=["json", "csv"])
+    use_api = False
+
+progress_bar = st.progress(0)
+progress_text = st.empty()
 
 if st.button("Get Usage"):
-    # JSONデータをロードする（実際にはAPIからデータを取得するコードに置き換えてください）
-    usage = get_usage(year_month, organization)
-
     # 各モデルの合計コストを計算
-    total_costs = {}
-    time_series_costs = []
-    for daily_cost in usage["daily_costs"]:
-        # タイムスタンプをdatetimeに変換
-        timestamp = datetime.fromtimestamp(daily_cost["timestamp"])
-        for line_item in daily_cost["line_items"]:
-            name = line_item["name"]
-            cost = line_item["cost"] / 100
-            if name in total_costs:
-                total_costs[name] += cost
-            else:
-                total_costs[name] = cost
-            time_series_costs.append({"date": timestamp, "model": name, "cost": cost})
+    monthly_usage = {}
+    if use_api:
+        year_month = f"{selected_year}-{selected_month:02}"
+        monthly_usage = get_monthly_usage(year_month, callback=update_progress, wait_time=0.5, dryrun=True)
+    else:
+        monthly_usage = load_monthly_usage(uploaded_file)
 
-    # DataFrameに変換
-    df = pd.DataFrame(list(total_costs.items()), columns=['Model', 'Cost'])
-    df_ts = pd.DataFrame(time_series_costs)
+    progress_bar.progress(100)
+    progress_text.text("Completed!")
 
-    # 全モデルの合計コストを計算
-    total_cost = df['Cost'].sum()
+    # Transforming the data into a structured format for visualization
+    rows = []
+    for date, details in monthly_usage.items():
+        total_costs = details['total_costs']
+        model_costs = details['model_costs']['total_costs']
+        whisper_costs = details['whisper_costs']['total_costs']
 
-    # メインエリアに全モデルのデータとグラフ、全モデルの合計コストを表示
-    st.write(df)
-    st.bar_chart(df.set_index('Model')['Cost'])
-    st.write('Total cost: ', total_cost)
+        # Detailed model costs
+        gpt4_costs = details['model_costs'].get('gpt-4-0613', {}).get('total_cost', 0)
+        gpt3_turbo_costs = details['model_costs'].get('gpt-3.5-turbo-0613', {}).get('total_cost', 0)
 
-    st.write(df_ts)
+        rows.append((date, total_costs, model_costs, whisper_costs, gpt4_costs, gpt3_turbo_costs))
+
+    # Creating a DataFrame
+    usage_df = pd.DataFrame(rows, columns=['Date', 'Total Costs', 'Model Costs', 'Whisper Costs', 'GPT-4 Costs', 'GPT-3.5 Turbo Costs'])
+
+    # Displaying the first few rows
+    usage_df.head()
+
+    # Display the DataFrame as a table
+    st.write("API Usage Details for July 2023:")
+    st.write(usage_df)
+
+    # Plot Total Costs
+    st.write("Total Costs Over Time:")
+    fig1, ax1 = plt.subplots()
+    usage_df.plot(x='Date', y='Total Costs', ax=ax1)
+    st.pyplot(fig1)
+
+    # Plot Model Costs
+    st.write("GPT-4 and GPT-3.5 Turbo Costs Over Time:")
+    fig2, ax2 = plt.subplots()
+    usage_df.plot(x='Date', y=['GPT-4 Costs', 'GPT-3.5 Turbo Costs'], ax=ax2)
+    st.pyplot(fig2)
+
+    # Plot Whisper Costs
+    st.write("Whisper Costs Over Time:")
+    fig3, ax3 = plt.subplots()
+    usage_df.plot(x='Date', y='Whisper Costs', ax=ax3)
+    st.pyplot(fig3)
+
+    st.write("Note: Customize the visualization further as needed.")

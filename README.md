@@ -2,6 +2,9 @@
 
 ![fig1](./docs/fig1.png)
 
+- `Use API`: APIを使用し、選択した月の使用状況を取得します。取得したデータはJSONファイルとして保存されます。
+- `Upload File`: `Use API`で取得した使用状況のJSONファイルをアップロードし、可視化します。
+
 ## Description
 
 `openai-billing-insights` is a Python-based project aimed to visualize the cost associated with the usage of various models in OpenAI's API. The application retrieves data from OpenAI's API, processes it, and provides visual analytics of model usage costs over time.
